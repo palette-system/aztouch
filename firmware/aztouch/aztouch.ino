@@ -47,7 +47,7 @@ unsigned long touch_last_time; // 最後にタッチした時間
 unsigned long touch_time; // タッチし続けている時間
 
 // タッチしていた時間内で2点タッチをしたかどうか(0x40=ダブルタッチしていた)
-uint8_t double_touch_flag;
+short double_touch_flag;
 
 // ドラッグ中かどうか(0x08=ドラッグ中)
 uint8_t drag_flag;
@@ -266,27 +266,29 @@ void requestEvent() {
   // 2点タッチを判定
   tf = 0;
   ty = 0; // 3になったら2点タッチ
-  for (i=0; i<5; i++) {
-    if (ty==0 && c[i] > 10) { // 1つタッチを見つけた
-      ty++;
-    } else if (ty == 1 && c[i] == 0) { // 触ってない場所を見つけた
-      ty++;
-    } else if (ty == 2 && c[i] > 10) { // 2つ目タッチを見つけた
-      ty++;
-      double_touch_flag |= 0x01; // タッチ中に2点タッチがあったかどうか
-      tf |= 0x01; // 現在2点タッチかどうか
-    }
-  }
   tx = 0; // 3になったら2点タッチ
-  for (i=5; i<11; i++) {
-    if (tx==0 && c[i] > 10) { // 1つタッチを見つけた
-      tx++;
-    } else if (tx == 1 && c[i] == 0) { // 触ってない場所を見つけた
-      tx++;
-    } else if (tx == 2 && c[i] > 10) { // 2つ目タッチを見つけた
-      tx++;
-      double_touch_flag |= 0x02; // タッチ中に2点タッチがあったかどうか
-      tf |= 0x02; // 現在2点タッチかどうか
+  if (read_total > 60) {
+    for (i=0; i<5; i++) {
+      if (ty==0 && c[i] > 10) { // 1つタッチを見つけた
+        ty++;
+      } else if (ty == 1 && c[i] == 0) { // 触ってない場所を見つけた
+        ty++;
+      } else if (ty == 2 && c[i] > 10) { // 2つ目タッチを見つけた
+        ty++;
+        double_touch_flag++; // タッチ中に2点タッチがあったかどうか
+        tf |= 0x01; // 現在2点タッチかどうか
+      }
+    }
+    for (i=5; i<11; i++) {
+      if (tx==0 && c[i] > 10) { // 1つタッチを見つけた
+        tx++;
+      } else if (tx == 1 && c[i] == 0) { // 触ってない場所を見つけた
+        tx++;
+      } else if (tx == 2 && c[i] > 10) { // 2つ目タッチを見つけた
+        tx++;
+        double_touch_flag++; // タッチ中に2点タッチがあったかどうか
+        tf |= 0x02; // 現在2点タッチかどうか
+      }
     }
   }
 
@@ -297,7 +299,7 @@ void requestEvent() {
     if (old_point[0] == 0 && old_point[1] == 0) {
       touch_start_time = touch_now_time; // タッチ開始時間を設定
       t = touch_now_time - touch_last_time; // 前のタッチからどれくらい時間が経ったか
-      if (t > 40 && t < 200) drag_flag = 0x08; // 前のタッチからすぐタッチされたならドラッグ
+      if (t > 40 && t < 160) drag_flag = 0x08; // 前のタッチからすぐタッチされたならドラッグ
     }
     touch_time = touch_now_time - touch_start_time; // タッチされ続けている時間 ミリ秒
     touch_last_time = touch_now_time; // 最後にタッチした時間
@@ -306,7 +308,7 @@ void requestEvent() {
   } else {
     // 離された && タッチ時間が短ければタップと判定
     if (old_point[0] > 0 && old_point[1] > 0 && touch_time > 20 && touch_time < 100) { // タップ判定(前測定時タッチされていた＋タッチ時間が短い)
-      if (double_touch_flag) {
+      if (double_touch_flag > 2) {
         // 2点でタップ
         tf |= 0x40;
       } else {
@@ -388,7 +390,6 @@ void requestEvent() {
     // タッチしていない
     old_point[0] = 0;
     old_point[1] = 0;
-    double_touch_flag = 0;
   }
 }
 
