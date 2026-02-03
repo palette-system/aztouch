@@ -7,8 +7,11 @@
 #include <EEPROM.h>
 #include <Wire.h>
 
+// AZTOUCH のアドレス
 #define I2C_SLAVE_ADD 0x0A
 
+// I2C クロック数
+#define I2C_CLOCK  100000
 
 // I2Cイベント
 void receiveEvent(int data_len); // データを受け取った
@@ -299,7 +302,7 @@ void requestEvent() {
     if (old_point[0] == 0 && old_point[1] == 0) {
       touch_start_time = touch_now_time; // タッチ開始時間を設定
       t = touch_now_time - touch_last_time; // 前のタッチからどれくらい時間が経ったか
-      if (t > 40 && t < 160) drag_flag = 0x08; // 前のタッチからすぐタッチされたならドラッグ
+      if (t > 40 && t < 160 && touch_time < 500) drag_flag = 0x08; // 前のタッチからすぐタッチされた & 前のタッチ時間が短い ならドラッグ
     }
     touch_time = touch_now_time - touch_start_time; // タッチされ続けている時間 ミリ秒
     touch_last_time = touch_now_time; // 最後にタッチした時間
@@ -316,9 +319,10 @@ void requestEvent() {
         tf |= 0x80;
       }
     }
-    double_touch_flag = 0;
-    touch_start_time = 0;
-    drag_flag = 0;
+    // フラグリセット
+    double_touch_flag = 0; // タッチ中に2点タッチになった事があったか
+    touch_start_time = 0; // タッチ開始時間
+    drag_flag = 0; // ドラッグ中
   }
 
   if (send_type == 1) {
@@ -333,7 +337,7 @@ void requestEvent() {
 
   } else {
     // 0 デフォルト az1uballと同じフォーマットを返す
-    if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) {
+    if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
       nx = (r[1] < 320)? (r[1] / 3): ((640 - r[1]) / 3); // 移動スピード(端の方タッチの方が早くなる)
       ny = (r[0] < 256)? (r[0] / 3): ((512 - r[0]) / 3); // 移動スピード(端の方タッチの方が早くなる)
       x = (r[1] / nx) - (320 / nx);
@@ -434,7 +438,8 @@ void setup() {
   delay(10);
 
   // I2C スレーブ初期化
-  Wire.begin(I2C_SLAVE_ADD);
+  Wire.begin(I2C_SLAVE_ADD); // アドレス
+  Wire.setClock(I2C_CLOCK); // クロック数
   Wire.onReceive(receiveEvent);
   Wire.onRequest(requestEvent);
 
