@@ -182,7 +182,7 @@ void receiveEvent(int data_len) {
 
 // I2C データ要求を受け取った時の処理
 void requestEvent() {
-  short c[11], i, r[2], e, tx, ty, tf, x, y, nx, ny;
+  short c[11], i, r[2], e, tx, ty, tf, x, y;
   unsigned long t;
 
   // 送信バッファ
@@ -338,10 +338,8 @@ void requestEvent() {
   } else {
     // 0 デフォルト az1uballと同じフォーマットを返す
     if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
-      nx = (r[1] < 320)? (r[1] / 3): ((640 - r[1]) / 3); // 移動スピード(端の方タッチの方が早くなる)
-      ny = (r[0] < 256)? (r[0] / 3): ((512 - r[0]) / 3); // 移動スピード(端の方タッチの方が早くなる)
-      x = (r[1] / nx) - (320 / nx);
-      y = (r[0] / ny) - (256 / ny);
+      x = (r[1] / 25) - 13;
+      y = (r[0] / 25) - 10;
       if (tf & 0x02) {
         // 横に2点タッチされていた場合は縦移動しない
         send_buf[0] = 0;
