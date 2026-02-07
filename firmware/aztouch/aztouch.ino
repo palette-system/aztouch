@@ -13,6 +13,10 @@
 // I2C クロック数
 #define I2C_CLOCK  100000
 
+// EEPROM のアドレス
+#define EEPADD_STATUS    0x00
+#define EEPADD_SPEED    0x01
+
 // I2Cイベント
 void receiveEvent(int data_len); // データを受け取った
 void requestEvent(); // データ要求を受け取った
@@ -28,11 +32,6 @@ short pin_def[11];
 // タッチした時の最大値(デフォルト値)
 const short pin_max_def[11] = {106, 112, 110, 116, 103,  109, 97, 109, 108, 104, 104};
 
-// タッチした時の最大値
-short pin_max[11] = {0,0,0,0,0,0,0,0,0,0,0};
-
-// タッチした時の最大値取得用バッファ
-short pin_max_buf[11] = {0,0,0,0,0,0,0,0,0,0,0};
 
 // 送信するデータのタイプ
 short send_type;
@@ -58,10 +57,16 @@ uint8_t drag_flag;
 // 前回測定した座標
 short old_point[2];
 
+// ピン設定
 short all_pin[11] = {
   PIN_PC0, PIN_PC2, PIN_PB4, PIN_PC3, PIN_PA4, // row 5ピン
   PIN_PB5, PIN_PA7, PIN_PA6, PIN_PA1, PIN_PC1, PIN_PA2 // col 6ピン
 };
+
+// スピード設定
+short speed_index;
+short speed_type[] = {72, 64, 40, 32, 24, 16};
+short speed_center_x, speed_center_y;
 
 // タッチのアナログ値取得
 void read_analog() {
@@ -91,7 +96,7 @@ void read_touch() {
   read_analog();
   // ピンごとのタッチ最大値からのタッチ割合を計算
   for (i=0; i<11; i++) {
-    send_input[i] = ((read_org[i] - pin_def[i]) * 128) / pin_max[i];
+    send_input[i] = ((read_org[i] - pin_def[i]) * 128) / pin_max_def[i];
     read_total += read_org[i] - pin_def[i];
   }
   if (read_total > 1023) {
@@ -108,52 +113,6 @@ void read_touch() {
   send_index++;
 }
 
-// タッチ最大値測定 開始
-void check_touch_max_start() {
-  short i;
-  // 測定バッファをリセット
-  for (i=0; i<11; i++) {
-    pin_max_buf[i] = 0;
-  }
-}
-
-// タッチ最大値測定 測定処理
-void check_touch_max_read() {
-  short i, c;
-  // タッチのアナログ値取得
-  read_analog();
-  // 測定バッファに格納
-  for (i=0; i<11; i++) {
-    c = read_org[i] - pin_def[i];
-    if (pin_max_buf[i] < c) pin_max_buf[i] = c; // タッチの最大値を超えればバッファ更新
-  }
-}
-
-// タッチ最大値測定 保存処理
-void check_touch_max_save() {
-  short i;
-  EEPROM.write(0, 0x22); // 初期化したよを書き込む
-  for (i=0; i<11; i++) {
-    // タッチ最大値を測定した値に更新
-    pin_max[i] = pin_max_buf[i];
-    // 測定したタッチ最大値 をEEPROMに書き込み
-    EEPROM.write(1 + (i * 2), pin_max_buf[i] & 0xFF);
-    EEPROM.write(2 + (i * 2), (pin_max_buf[i] >> 8) & 0xFF);
-  }
-}
-
-// タッチ最大値 リセット
-void touch_max_reset() {
-  short i, c = 0;
-  // 書き込みバッファにデフォルト値を設定
-  for (i=0; i<11; i++) {
-    pin_max_buf[i] = pin_max_def[i];
-    if (pin_max[i] != pin_max_def[i]) c++;
-  }
-  // 現在のタッチ最大値とデフォルトのタッチ最大値に違いがあればバッファに入れたデフォルトを保存
-  if (c > 0) check_touch_max_save();
-}
-
 // I2C コマンドを受け取った
 void receiveEvent(int data_len) {
   short t;
@@ -166,16 +125,13 @@ void receiveEvent(int data_len) {
       send_type = 1; // タッチのX,Y座標を返す
     } else if (t == 0x22) {
       send_type = 2; // row,colピンのアナログ値をそのまま返す
-    } else if (t == 0x23) {
-      send_type = 3; // タッチ最大値測定開始
-      check_touch_max_start(); // 開始処理
-    } else if (t == 0x24) {
-      // タッチ最大値測定 保存処理
-      check_touch_max_save();
-      send_type = 0; // レスポンスはAZ1UBALLにする
-    } else if (t == 0x25) {
-      // タッチ最大値設定をリセットする
-      touch_max_reset();
+    } else if (t >= 0x30 && t <= 0x35) {
+      // 0x30 ～ 0x35 速度設定
+      if (speed_index != (0x0F & t)) {
+        speed_index = (0x0F & t);
+        speed_center_x = 320 / speed_type[speed_index];
+        speed_center_y = 256 / speed_type[speed_index];
+      }
     }
   }
 }
@@ -188,18 +144,7 @@ void requestEvent() {
   // 送信バッファ
   uint8_t send_buf[24];
 
-  if (send_type == 3) { // type 3. タッチ最大値測定中
-    // タッチ最大値 測定処理
-    check_touch_max_read();
-    for (i=0; i<11; i++) {
-      send_buf[(i * 2)] = (pin_max_buf[i] >> 8) & 0xFF;
-      send_buf[(i * 2) + 1] = pin_max_buf[i] & 0xFF;
-    }
-    // 測定したタッチ最大値を返す
-    Wire.write(send_buf, 22);
-    return;
-
-  } else if (send_type == 2) { // type 2. row,colピンのアナログ値をそのまま返す
+  if (send_type == 2) { // type 2. row,colピンのアナログ値をそのまま返す
     // ピン情報を取得
     read_touch();
     // ピンのアナログ値をそのまま返す
@@ -338,8 +283,8 @@ void requestEvent() {
   } else {
     // 0 デフォルト az1uballと同じフォーマットを返す
     if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
-      x = (r[1] / 25) - 13;
-      y = (r[0] / 25) - 10;
+      x = (r[1] / speed_type[speed_index]) - speed_center_x;
+      y = (r[0] / speed_type[speed_index]) - speed_center_y;
       if (tf & 0x02) {
         // 横に2点タッチされていた場合は縦移動しない
         send_buf[0] = 0;
@@ -410,20 +355,14 @@ void setup() {
   delay(10);
 
   // 初めての起動の場合EPPROMにタッチ最大値設定を書き込む
-  c = EEPROM.read(0); // 最初の0バイト目を読み込む
-  if (c != 0x22) {
-    EEPROM.write(0, 0x22); // 初期化したよを書き込む
-    for (i=0; i<11; i++) {
-      // タッチ最大値設定データ書込み
-      EEPROM.write(1 + (i * 2), pin_max_def[i] & 0xFF);
-      EEPROM.write(2 + (i * 2), (pin_max_def[i] >> 8) & 0xFF);
-    }
+  c = EEPROM.read(EEPADD_STATUS); // 最初の0バイト目を読み込む
+  if (c != 0x25) {
+    EEPROM.write(EEPADD_STATUS, 0x25); // 初期化したよを書き込む
   }
 
-  // EEPROMからタッチ最大値設定を読み込む
-  for (i=0; i<11; i++) {
-    pin_max[i] = (EEPROM.read(2 + (i * 2)) << 8) + EEPROM.read(1 + (i * 2));
-  }
+  speed_index = 3;
+  speed_center_x = 320 / speed_type[speed_index];
+  speed_center_y = 256 / speed_type[speed_index];
 
 
   // col : A4, A5, A6, A7, B5 
