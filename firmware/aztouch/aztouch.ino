@@ -65,8 +65,11 @@ short all_pin[11] = {
 
 // スピード設定
 short speed_index;
-short speed_type[] = {72, 64, 40, 32, 24, 16};
-short speed_center_x, speed_center_y;
+// short speed_type_x[] = {23, 15, 8, 5, 3, 2, 1, 0, 0, 1, 2, 3, 5, 8, 15, 23, 23};
+// short speed_type_y[] = {12, 5, 3, 2, 1, 0, 0, 1, 2, 3, 5, 12, 12};
+
+short speed_type_x[] = {12, 10, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 12};
+short speed_type_y[] = {12, 10, 8, 6, 4, 3, 2, 1, 1, 2, 3, 4, 6, 8, 10, 12, 12};
 
 // タッチのアナログ値取得
 void read_analog() {
@@ -127,11 +130,6 @@ void receiveEvent(int data_len) {
       send_type = 2; // row,colピンのアナログ値をそのまま返す
     } else if (t >= 0x30 && t <= 0x35) {
       // 0x30 ～ 0x35 速度設定
-      if (speed_index != (0x0F & t)) {
-        speed_index = (0x0F & t);
-        speed_center_x = 320 / speed_type[speed_index];
-        speed_center_y = 256 / speed_type[speed_index];
-      }
     }
   }
 }
@@ -283,22 +281,19 @@ void requestEvent() {
   } else {
     // 0 デフォルト az1uballと同じフォーマットを返す
     if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
-      x = (r[1] / speed_type[speed_index]) - speed_center_x;
-      y = (r[0] / speed_type[speed_index]) - speed_center_y;
+      x = (r[1] / 32);
+      y = (r[0] / 32);
       if (tf & 0x02) {
         // 横に2点タッチされていた場合は縦移動しない
         send_buf[0] = 0;
         send_buf[1] = 0;
       } else {
         // 横移動
-        if (x > 0) {
+        if (x > 10) {
           send_buf[0] = 0;
-          send_buf[1] = x;
-        } else if (x < 0) {
-          send_buf[0] = x * -1;
-          send_buf[1] = 0;
+          send_buf[1] = speed_type_x[x];
         } else {
-          send_buf[0] = 0;
+          send_buf[0] = speed_type_x[x];
           send_buf[1] = 0;
         }
       }
@@ -308,14 +303,11 @@ void requestEvent() {
         send_buf[3] = 0;
       } else {
         // 縦移動
-        if (y > 0) {
+        if (y > 8) {
           send_buf[2] = 0;
-          send_buf[3] = y;
-        } else if (y < 0) {
-          send_buf[2] = y * -1;
-          send_buf[3] = 0;
+          send_buf[3] = speed_type_y[y];
         } else {
-          send_buf[2] = 0;
+          send_buf[2] = speed_type_y[y];
           send_buf[3] = 0;
         }
       }
@@ -359,10 +351,6 @@ void setup() {
   if (c != 0x25) {
     EEPROM.write(EEPADD_STATUS, 0x25); // 初期化したよを書き込む
   }
-
-  speed_index = 3;
-  speed_center_x = 320 / speed_type[speed_index];
-  speed_center_y = 256 / speed_type[speed_index];
 
 
   // col : A4, A5, A6, A7, B5 
