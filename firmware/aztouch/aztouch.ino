@@ -1,4 +1,4 @@
-// 1Uトラックボールユニットのホイールセンサーの入力をI2Cに流す
+// AZTOUCH パッド上のアナログ値を取得してI2Cに流す
 
 // 開発環境の作り方
 // https://ameblo.jp/pta55/entry-12654450554.html
@@ -22,9 +22,9 @@ void receiveEvent(int data_len); // データを受け取った
 void requestEvent(); // データ要求を受け取った
 
 
-// 送信バッファ
-short read_org[11];
-short send_input[11];
+// 読み込んだパッドの数値
+short read_org[11]; // 読み込んだアナログ値まま
+short send_input[11]; // アナログ値から計算した入力値
 
 // タッチしていない時のアナログ値
 short pin_def[11];
@@ -48,7 +48,7 @@ unsigned long touch_now_time; // 今の時間
 unsigned long touch_last_time; // 最後にタッチした時間
 unsigned long touch_time; // タッチし続けている時間
 
-// タッチしていた時間内で2点タッチをしたかどうか(0x40=ダブルタッチしていた)
+// タッチしていた時間内で2点タッチをどれくらいのサイクル行っていたか
 short double_touch_flag;
 
 // ドラッグ中かどうか(0x08=ドラッグ中)
@@ -65,11 +65,33 @@ short all_pin[11] = {
 
 // スピード設定
 short speed_index;
-// short speed_type_x[] = {23, 15, 8, 5, 3, 2, 1, 0, 0, 1, 2, 3, 5, 8, 15, 23, 23};
-// short speed_type_y[] = {12, 5, 3, 2, 1, 0, 0, 1, 2, 3, 5, 12, 12};
 
-short speed_type_x[] = {12, 10, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 12};
-short speed_type_y[] = {12, 10, 8, 6, 4, 3, 2, 1, 1, 2, 3, 4, 6, 8, 10, 12, 12};
+// short speed_type_x[] = {12, 10, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 12};
+// short speed_type_y[] = {12, 10, 8, 6, 4, 3, 2, 1, 1, 2, 3, 4, 6, 8, 10, 12, 12};
+
+// 速度設定用の構造体
+struct speed_setting {
+  short speed_x[21];
+  short speed_y[17];
+};
+
+// 速度設定
+const speed_setting speed_type[] = {
+  {
+    .speed_x = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10},
+    .speed_y = {10, 8, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 8, 10, 10}
+  },
+  {
+    .speed_x = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10},
+    .speed_y = {10, 8, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 8, 10, 10}
+  }
+};
+
+// 現在の速度設定
+speed_setting speed_buf = {
+  .speed_x = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10},
+  .speed_y = {10, 8, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 8, 10, 10}
+};
 
 // タッチのアナログ値取得
 void read_analog() {
@@ -291,9 +313,9 @@ void requestEvent() {
         // 横移動
         if (x > 10) {
           send_buf[0] = 0;
-          send_buf[1] = speed_type_x[x];
+          send_buf[1] = speed_buf.speed_x[x];
         } else {
-          send_buf[0] = speed_type_x[x];
+          send_buf[0] = speed_buf.speed_x[x];
           send_buf[1] = 0;
         }
       }
@@ -305,9 +327,9 @@ void requestEvent() {
         // 縦移動
         if (y > 8) {
           send_buf[2] = 0;
-          send_buf[3] = speed_type_y[y];
+          send_buf[3] = speed_buf.speed_y[y];
         } else {
-          send_buf[2] = speed_type_y[y];
+          send_buf[2] = speed_buf.speed_y[y];
           send_buf[3] = 0;
         }
       }
