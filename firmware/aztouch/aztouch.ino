@@ -15,7 +15,8 @@
 
 // EEPROM のアドレス
 #define EEPADD_STATUS    0x00
-#define EEPADD_SPEED    0x01
+#define EEPADD_SEND_TYPE    0x01
+#define EEPADD_SPEED    0x02
 
 // I2Cイベント
 void receiveEvent(int data_len); // データを受け取った
@@ -66,9 +67,6 @@ short all_pin[11] = {
 // スピード設定
 short speed_index;
 
-// short speed_type_x[] = {12, 10, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 12};
-// short speed_type_y[] = {12, 10, 8, 6, 4, 3, 2, 1, 1, 2, 3, 4, 6, 8, 10, 12, 12};
-
 // 速度設定用の構造体
 struct speed_setting {
   short speed_x[21];
@@ -78,10 +76,6 @@ struct speed_setting {
 // 速度設定
 const speed_setting speed_type[] = {
   {
-    .speed_x = {5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5},
-    .speed_y = {4, 3, 3, 2, 2, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4}
-  },
-  {
     .speed_x = {8, 7, 6, 5, 4, 3, 2, 2, 1, 0, 0, 1, 2, 2, 3, 4, 5, 6, 7, 8, 8},
     .speed_y = {7, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 7}
   },
@@ -90,8 +84,16 @@ const speed_setting speed_type[] = {
     .speed_y = {7, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 7}
   },
   {
-    .speed_x = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10},
-    .speed_y = {10, 8, 6, 5, 4, 3, 2, 1, 1, 2, 3, 4, 5, 6, 8, 10, 10}
+    .speed_x = {10, 9, 8, 7, 6, 5, 4, 3, 2, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10},
+    .speed_y = {10, 8, 6, 5, 4, 3, 2, 0, 0, 2, 3, 4, 5, 6, 8, 10, 10}
+  },
+  {
+    .speed_x = {12, 10, 8, 7, 6, 5, 4, 3, 2, 0, 0, 2, 3, 4, 5, 6, 7, 8, 10, 12, 12},
+    .speed_y = {12, 10, 8, 6, 4, 3, 2, 0, 0, 2, 3, 4, 6, 8, 10, 12, 12}
+  },
+  {
+    .speed_x = {14, 12, 10, 7, 6, 5, 4, 3, 2, 0, 0, 2, 3, 4, 5, 6, 7, 10, 12, 14, 14},
+    .speed_y = {14, 12, 10, 6, 4, 3, 2, 0, 0, 2, 3, 4, 6, 10, 12, 14, 14}
   }
 };
 
@@ -153,15 +155,24 @@ void receiveEvent(int data_len) {
   // コマンド受け取り
   while (Wire.available()) {
     t = Wire.read();
-    if (t == 0x20) {
-      send_type = 0; // AZ1UBALLのフォーマットで返す
-    } else if (t == 0x21) {
-      send_type = 1; // タッチのX,Y座標を返す
-    } else if (t == 0x22) {
-      send_type = 2; // row,colピンのアナログ値をそのまま返す
-    } else if (t >= 0x30 && t <= 0x35) {
-      // 0x30 ～ 0x35 速度設定
+    if (t >= 0x20 && t <= 0x23) {
+      // 0x20 : AZ1UBALL と同じレスポンス
+      // 0x21 : AZTOUCH 2バイトレスポンス
+      // 0x22 : タッチのX,Y座標を返す
+      // 0x23 : row,colピンのアナログ値をそのまま返す
+      if ((t & 0x0F) != send_type) {
+        send_type = (t & 0x0F);
+        EEPROM.write(EEPADD_SEND_TYPE, (t & 0x0F));
+      }
+    } else if (t >= 0x30 && t <= 0x34) {
+      // 0x30 ～ 0x34 速度設定
+      if ((t & 0x0F) != speed_index) {
+        speed_index = (t & 0x0F);
+        EEPROM.write(EEPADD_SPEED, (speed_index & 0x0F));
+        memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
+      }
     }
+    break;
   }
 }
 
@@ -173,7 +184,7 @@ void requestEvent() {
   // 送信バッファ
   uint8_t send_buf[24];
 
-  if (send_type == 2) { // type 2. row,colピンのアナログ値をそのまま返す
+  if (send_type == 3) { // type 2. row,colピンのアナログ値をそのまま返す
     // ピン情報を取得
     read_touch();
     // ピンのアナログ値をそのまま返す
@@ -299,8 +310,8 @@ void requestEvent() {
     drag_flag = 0; // ドラッグ中
   }
 
-  if (send_type == 1) {
-    // X,Y 座標を返す
+  if (send_type == 2) {
+    // タッチのX,Y座標を返す
     send_buf[0] = (r[1] >> 8) & 0xFF; // x
     send_buf[1] = r[1] & 0xFF; // x
     send_buf[2] = (r[0] >> 8) & 0xFF; // y
@@ -309,8 +320,28 @@ void requestEvent() {
     send_buf[5] = tf; // タッチ操作フラグ
     Wire.write(send_buf, 6);
 
+  } else if (send_type == 1) {
+    // 1 = AZTOUCH 2バイトレスポンス
+    send_buf[0] = 0;
+    send_buf[1] = tf; // タッチ操作フラグ
+    if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
+      x = (r[1] / 32);
+      y = (r[0] / 32);
+      if (!(tf & 0x02)) {
+        // 横移動
+        send_buf[0] |= speed_buf.speed_x[x] & 0x0F;
+      }
+      if (!(tf & 0x01)) {
+        // 縦移動
+        send_buf[0] |= (speed_buf.speed_y[y] << 4) & 0xF0;
+      }
+      if (x < 10) send_buf[1] |= 0x10; // X移動マイナスフラグ
+      if (y < 8) send_buf[1] |= 0x20; // Y移動マイナスフラグ
+    }
+    Wire.write(send_buf, 2);
+
   } else {
-    // 0 デフォルト az1uballと同じフォーマットを返す
+    // 0 = デフォルト az1uballと同じフォーマットを返す
     if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
       x = (r[1] / 32);
       y = (r[0] / 32);
@@ -379,10 +410,18 @@ void setup() {
 
   // 初めての起動の場合EPPROMにタッチ最大値設定を書き込む
   c = EEPROM.read(EEPADD_STATUS); // 最初の0バイト目を読み込む
-  if (c != 0x25) {
-    EEPROM.write(EEPADD_STATUS, 0x25); // 初期化したよを書き込む
+  if (c != 0x21) {
+    EEPROM.write(EEPADD_STATUS, 0x21); // 初期化したよを書き込む
+    EEPROM.write(EEPADD_SEND_TYPE, 0x00); // レスポンスタイプAZ1UBALLフォーマットを指定
+    EEPROM.write(EEPADD_SPEED, 0x03); // カーソル移動速度を指定
   }
 
+  // レスポンスタイプをEPPROMから読み込む
+  send_type = EEPROM.read(EEPADD_SEND_TYPE);
+
+  // カーソルの移動速度をEPPROMから読み込む
+  speed_index = EEPROM.read(EEPADD_SPEED);
+  memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
 
   // col : A4, A5, A6, A7, B5 
   // row : C0, C1, C2, C3, A1, A2 (10K)
@@ -400,7 +439,6 @@ void setup() {
   Wire.onRequest(requestEvent);
 
   send_index = 0;
-  send_type = 0;
   double_touch_flag = 0;
   drag_flag = 0;
 
