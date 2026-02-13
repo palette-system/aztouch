@@ -4,6 +4,7 @@
 // https://ameblo.jp/pta55/entry-12654450554.html
 
 #include <avr/pgmspace.h>
+#include <avr/sleep.h>
 #include <EEPROM.h>
 #include <Wire.h>
 
@@ -103,6 +104,8 @@ speed_setting speed_buf = {
   .speed_y = {7, 6, 5, 4, 3, 2, 1, 0, 0, 1, 2, 3, 4, 5, 6, 7, 7}
 };
 
+// スリープフラグ
+short sleep_flag;
 
 // タッチのアナログ値取得
 void read_analog() {
@@ -153,7 +156,7 @@ void read_touch() {
 void receiveEvent(int data_len) {
   short t;
   // コマンド受け取り
-  while (Wire.available()) {
+  if (Wire.available()) {
     t = Wire.read();
     if (t >= 0x20 && t <= 0x23) {
       // 0x20 : AZ1UBALL と同じレスポンス
@@ -171,8 +174,10 @@ void receiveEvent(int data_len) {
         EEPROM.write(EEPADD_SPEED, (speed_index & 0x0F));
         memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
       }
+    } else if (t == 0x40) {
+      // スリープ実行フラグON
+      sleep_flag = 1;
     }
-    break;
   }
 }
 
@@ -321,8 +326,8 @@ void requestEvent() {
     Wire.write(send_buf, 6);
 
   } else if (send_type == 1) {
-    // 1 = AZTOUCH 2バイトレスポンス
-    send_buf[0] = 0;
+    // 1 = 2バイトレスポンス
+    send_buf[0] = 0; // y 4bit | x 4bit
     send_buf[1] = tf; // タッチ操作フラグ
     if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
       x = (r[1] / 32);
@@ -423,6 +428,7 @@ void setup() {
   speed_index = EEPROM.read(EEPADD_SPEED);
   memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
 
+  // センサーピン初期化
   // col : A4, A5, A6, A7, B5 
   // row : C0, C1, C2, C3, A1, A2 (10K)
   for (i=0; i<11; i++) {
@@ -431,6 +437,10 @@ void setup() {
     pin_def[i] = 0;
   }
   delay(10);
+
+  // スリープ初期化
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  sleep_enable();
 
   // I2C スレーブ初期化
   Wire.begin(I2C_SLAVE_ADD); // アドレス
@@ -441,12 +451,20 @@ void setup() {
   send_index = 0;
   double_touch_flag = 0;
   drag_flag = 0;
+  sleep_flag = 0;
 
 }
 
 
 void loop() {
+  // デフォルト値を取得するため起動してから5回だけパッド情報取得
   if (send_index < 5) read_touch();
+
+  // スリープ実行
+  if (sleep_flag) {
+    sleep_flag = 0;
+    sleep_cpu();
+  }
 
   delay(100);
 }
