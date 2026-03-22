@@ -65,6 +65,12 @@ short all_pin[11] = {
   PIN_PB5, PIN_PA7, PIN_PA6, PIN_PA1, PIN_PC1, PIN_PA2 // col 6ピン
 };
 
+// 送信バッファ
+uint8_t send_buf[24];
+
+// バッファを送ったフラグ
+short send_status;
+
 // スピード設定
 short speed_index;
 
@@ -108,7 +114,7 @@ speed_setting speed_buf = {
 short sleep_flag;
 
 // タッチのアナログ値取得
-void read_analog() {
+void read_analog_raw() {
   short i;
   noInterrupts(); // 割り込み禁止 開始
   for (i=0; i<11; i++) {
@@ -128,11 +134,11 @@ void read_analog() {
 }
 
 // タッチの情報を取得
-void read_touch() {
+void read_analog_data() {
   short i;
   read_total = 0;
   // タッチのアナログ値取得
-  read_analog();
+  read_analog_raw();
   // ピンごとのタッチ最大値からのタッチ割合を計算
   for (i=0; i<11; i++) {
     send_input[i] = ((read_org[i] - pin_def[i]) * 128) / pin_max_def[i];
@@ -152,58 +158,25 @@ void read_touch() {
   send_index++;
 }
 
-// I2C コマンドを受け取った
-void receiveEvent(int data_len) {
-  short t;
-  // コマンド受け取り
-  if (Wire.available()) {
-    t = Wire.read();
-    if (t >= 0x20 && t <= 0x23) {
-      // 0x20 : AZ1UBALL と同じレスポンス
-      // 0x21 : AZTOUCH 2バイトレスポンス
-      // 0x22 : タッチのX,Y座標を返す
-      // 0x23 : row,colピンのアナログ値をそのまま返す
-      if ((t & 0x0F) != send_type) {
-        send_type = (t & 0x0F);
-        EEPROM.write(EEPADD_SEND_TYPE, (t & 0x0F));
-      }
-    } else if (t >= 0x30 && t <= 0x34) {
-      // 0x30 ～ 0x34 速度設定
-      if ((t & 0x0F) != speed_index) {
-        speed_index = (t & 0x0F);
-        EEPROM.write(EEPADD_SPEED, (speed_index & 0x0F));
-        memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
-      }
-    } else if (t == 0x40) {
-      // スリープ実行フラグON
-      sleep_flag = 1;
-    }
-  }
-}
-
-// I2C データ要求を受け取った時の処理
-void requestEvent() {
+void read_touch() {
   short c[11], i, r[2], e, tx, ty, tf, x, y;
   unsigned long t;
 
-  // 送信バッファ
-  uint8_t send_buf[24];
-
   if (send_type == 3) { // type 2. row,colピンのアナログ値をそのまま返す
     // ピン情報を取得
-    read_touch();
+    read_analog_data();
     // ピンのアナログ値をそのまま返す
     for (i=0; i<11; i++) {
       send_buf[(i*2)] = (read_org[i] >> 8) & 0xFF;
       send_buf[(i*2) + 1] = read_org[i] & 0xFF;
     }
-    Wire.write(send_buf, 22);
+    // Wire.write(send_buf, 22);
+    send_status = 1;
     return;
-
   }
 
   // ピン情報を取得
-  read_touch();
+  read_analog_data();
 
   // ピン情報からサーモを作成
   // これをした方がカーソルのブレが少なかった
@@ -323,7 +296,8 @@ void requestEvent() {
     send_buf[3] = r[0] & 0xFF; // y
     send_buf[4] = (read_total >> 2) & 0xFF; // タッチ量
     send_buf[5] = tf; // タッチ操作フラグ
-    Wire.write(send_buf, 6);
+    // Wire.write(send_buf, 6);
+    send_status = 1;
 
   } else if (send_type == 1) {
     // 1 = 2バイトレスポンス
@@ -343,7 +317,8 @@ void requestEvent() {
       if (x < 10) send_buf[1] |= 0x10; // X移動マイナスフラグ
       if (y < 8) send_buf[1] |= 0x20; // Y移動マイナスフラグ
     }
-    Wire.write(send_buf, 2);
+    // Wire.write(send_buf, 2);
+    send_status = 1;
 
   } else {
     // 0 = デフォルト az1uballと同じフォーマットを返す
@@ -385,7 +360,8 @@ void requestEvent() {
       send_buf[3] = 0;
     }
     send_buf[4] = tf; // タッチ操作フラグ
-    Wire.write(send_buf, 5);
+    // Wire.write(send_buf, 5);
+    send_status = 1;
   }
 
   if (read_total > 60) {
@@ -397,6 +373,49 @@ void requestEvent() {
     old_point[0] = 0;
     old_point[1] = 0;
   }
+}
+
+// I2C コマンドを受け取った
+void receiveEvent(int data_len) {
+  short t;
+  // コマンド受け取り
+  if (Wire.available()) {
+    t = Wire.read();
+    if (t >= 0x20 && t <= 0x23) {
+      // 0x20 : AZ1UBALL と同じレスポンス
+      // 0x21 : AZTOUCH 2バイトレスポンス
+      // 0x22 : タッチのX,Y座標を返す
+      // 0x23 : row,colピンのアナログ値をそのまま返す
+      if ((t & 0x0F) != send_type) {
+        send_type = (t & 0x0F);
+        EEPROM.write(EEPADD_SEND_TYPE, (t & 0x0F));
+      }
+    } else if (t >= 0x30 && t <= 0x34) {
+      // 0x30 ～ 0x34 速度設定
+      if ((t & 0x0F) != speed_index) {
+        speed_index = (t & 0x0F);
+        EEPROM.write(EEPADD_SPEED, (speed_index & 0x0F));
+        memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
+      }
+    } else if (t == 0x40) {
+      // スリープ実行フラグON
+      sleep_flag = 1;
+    }
+  }
+}
+
+// I2C データ要求を受け取った時の処理
+void requestEvent() {
+    if (send_type == 1) {
+      Wire.write(send_buf, 2);
+    } else if (send_type == 2) {
+      Wire.write(send_buf, 6);
+    } else if (send_type == 3) {
+      Wire.write(send_buf, 22);
+    } else {
+      Wire.write(send_buf, 5);
+    }
+    send_status = 0;
 }
 
 void setup() {
@@ -452,13 +471,17 @@ void setup() {
   double_touch_flag = 0;
   drag_flag = 0;
   sleep_flag = 0;
+  send_status = 0;
 
 }
 
 
 void loop() {
   // デフォルト値を取得するため起動してから5回だけパッド情報取得
-  if (send_index < 5) read_touch();
+  if (send_index < 5) {
+    read_analog_data();
+    delay(100);
+  }
 
   // スリープ実行
   if (sleep_flag) {
@@ -466,5 +489,8 @@ void loop() {
     sleep_cpu();
   }
 
-  delay(100);
+  if (send_status == 0) {
+    read_touch();
+  }
+
 }
