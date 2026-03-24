@@ -50,6 +50,9 @@ unsigned long touch_now_time; // 今の時間
 unsigned long touch_last_time; // 最後にタッチした時間
 unsigned long touch_time; // タッチし続けている時間
 
+// 読み込みしてからどれくらい時間が経ったか
+unsigned long check_time;
+
 // タッチしていた時間内で2点タッチをどれくらいのサイクル行っていたか
 short double_touch_flag;
 
@@ -114,10 +117,10 @@ speed_setting speed_buf = {
 short sleep_flag;
 
 // タッチのアナログ値取得
-void read_analog_raw() {
+void read_analog_raw(short check_max) {
   short i;
   noInterrupts(); // 割り込み禁止 開始
-  for (i=0; i<11; i++) {
+  for (i=0; i<check_max; i++) {
     // 読み取りピンをHIGHにして電気を流す
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 1);
@@ -134,13 +137,13 @@ void read_analog_raw() {
 }
 
 // タッチの情報を取得
-void read_analog_data() {
+void read_analog_data(short check_max) {
   short i;
   read_total = 0;
   // タッチのアナログ値取得
-  read_analog_raw();
+  read_analog_raw(check_max);
   // ピンごとのタッチ最大値からのタッチ割合を計算
-  for (i=0; i<11; i++) {
+  for (i=0; i<check_max; i++) {
     send_input[i] = ((read_org[i] - pin_def[i]) * 128) / pin_max_def[i];
     read_total += read_org[i] - pin_def[i];
   }
@@ -149,13 +152,6 @@ void read_analog_data() {
   } else if (read_total < 0) {
     read_total = 0;
   }
-  // 起動してすぐのアナログ値を保持してこれをデフォルト値にする
-  if (send_index == 3) {
-    for (i=0; i<11; i++) {
-      pin_def[i] = read_org[i];
-    }
-  }
-  send_index++;
 }
 
 void read_touch() {
@@ -164,7 +160,7 @@ void read_touch() {
 
   if (send_type == 3) { // type 2. row,colピンのアナログ値をそのまま返す
     // ピン情報を取得
-    read_analog_data();
+    read_analog_data(11);
     // ピンのアナログ値をそのまま返す
     for (i=0; i<11; i++) {
       send_buf[(i*2)] = (read_org[i] >> 8) & 0xFF;
@@ -176,7 +172,7 @@ void read_touch() {
   }
 
   // ピン情報を取得
-  read_analog_data();
+  read_analog_data(11);
 
   // ピン情報からサーモを作成
   // これをした方がカーソルのブレが少なかった
@@ -404,18 +400,26 @@ void receiveEvent(int data_len) {
   }
 }
 
+// レスポンスタイプ別のレスポンスサイズ
+short res_length[] = {5, 2, 6, 22};
+
 // I2C データ要求を受け取った時の処理
 void requestEvent() {
-    if (send_type == 1) {
-      Wire.write(send_buf, 2);
-    } else if (send_type == 2) {
-      Wire.write(send_buf, 6);
-    } else if (send_type == 3) {
-      Wire.write(send_buf, 22);
-    } else {
-      Wire.write(send_buf, 5);
-    }
-    send_status = 0;
+  check_time = millis() - touch_now_time;
+  if (check_time < 100) {
+    // タッチ読み込みしてから100ミリ秒以内であれば測定した内容を返す
+    Wire.write(send_buf, res_length[send_type]);
+  } else {
+    // タッチ読み込みから時間が経っていれば現在タッチしているかどうかだけ返す
+    read_analog_data(5); // 横軸だけ読み込む事で消費電力削減
+    short tf = (read_total > 30)? 0x04: 0x00;
+    memset(send_buf, 0x00, res_length[send_type]);
+    send_buf[res_length[send_type] - 1] = tf;
+    Wire.write(send_buf, res_length[send_type]);
+    old_point[0] = 0;
+    old_point[1] = 0;
+  }
+  send_status = 0;
 }
 
 void setup() {
@@ -468,6 +472,7 @@ void setup() {
   Wire.onRequest(requestEvent);
 
   send_index = 0;
+  touch_now_time = 0;
   double_touch_flag = 0;
   drag_flag = 0;
   sleep_flag = 0;
@@ -478,8 +483,16 @@ void setup() {
 
 void loop() {
   // デフォルト値を取得するため起動してから5回だけパッド情報取得
-  if (send_index < 5) {
-    read_analog_data();
+  if (send_index < 4) {
+    read_analog_data(11);
+    // 起動してすぐのアナログ値を保持してこれをデフォルト値にする
+    if (send_index == 3) {
+      short i;
+      for (i=0; i<11; i++) {
+        pin_def[i] = read_org[i];
+      }
+    }
+    send_index++;
     delay(100);
   }
 
