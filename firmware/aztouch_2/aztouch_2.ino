@@ -116,6 +116,10 @@ speed_setting speed_buf = {
 // スリープフラグ
 short sleep_flag;
 
+// レスポンスタイプ別のレスポンスサイズ
+short res_length_list[] = {5, 2, 6, 22};
+short res_length = 0;
+
 // タッチのアナログ値取得
 void read_analog_raw(short check_max) {
   short i;
@@ -385,6 +389,7 @@ void receiveEvent(int data_len) {
       if ((t & 0x0F) != send_type) {
         send_type = (t & 0x0F);
         EEPROM.write(EEPADD_SEND_TYPE, (t & 0x0F));
+        res_length = res_length_list[send_type];
       }
     } else if (t >= 0x30 && t <= 0x34) {
       // 0x30 ～ 0x34 速度設定
@@ -400,24 +405,27 @@ void receiveEvent(int data_len) {
   }
 }
 
-// レスポンスタイプ別のレスポンスサイズ
-short res_length[] = {5, 2, 6, 22};
 
 // I2C データ要求を受け取った時の処理
 void requestEvent() {
   check_time = millis() - touch_now_time;
   if (check_time < 100) {
     // タッチ読み込みしてから100ミリ秒以内であれば測定した内容を返す
-    Wire.write(send_buf, res_length[send_type]);
+    Wire.write(send_buf, res_length);
   } else {
     // タッチ読み込みから時間が経っていれば現在タッチしているかどうかだけ返す
     read_analog_data(5); // 横軸だけ読み込む事で消費電力削減
-    short tf = (read_total > 30)? 0x04: 0x00;
-    memset(send_buf, 0x00, res_length[send_type]);
-    send_buf[res_length[send_type] - 1] = tf;
-    Wire.write(send_buf, res_length[send_type]);
-    old_point[0] = 0;
-    old_point[1] = 0;
+    if (read_total > 30) {
+      // タッチされていればタッチを読み込んで返す
+      read_touch();
+      Wire.write(send_buf, res_length);
+    } else {
+      // タッチされていなければ0詰めのデータを返す
+      memset(send_buf, 0x00, res_length);
+      Wire.write(send_buf, res_length);
+      old_point[0] = 0;
+      old_point[1] = 0;
+    }
   }
   send_status = 0;
 }
@@ -446,6 +454,7 @@ void setup() {
 
   // レスポンスタイプをEPPROMから読み込む
   send_type = EEPROM.read(EEPADD_SEND_TYPE);
+  res_length = res_length_list[send_type];
 
   // カーソルの移動速度をEPPROMから読み込む
   speed_index = EEPROM.read(EEPADD_SPEED);
