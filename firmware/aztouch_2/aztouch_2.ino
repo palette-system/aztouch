@@ -5,6 +5,9 @@
 
 #include <avr/pgmspace.h>
 #include <avr/sleep.h>
+#include <avr/io.h>
+#include <avr/cpufunc.h>
+#include <avr/interrupt.h>
 #include <EEPROM.h>
 #include <Wire.h>
 
@@ -83,6 +86,11 @@ struct speed_setting {
   short speed_y[17];
 };
 
+uint16_t millis_my() {
+  while (RTC.STATUS & RTC_CNTBUSY_bm);
+  return RTC.CNT;
+}
+
 // 速度設定
 const speed_setting speed_type[] = {
   {
@@ -128,14 +136,21 @@ void read_analog_raw(short check_max) {
     // 読み取りピンをHIGHにして電気を流す
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 1);
-    delayMicroseconds(10);
+    // delayMicroseconds(10);
+    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
+    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
+    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
+    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
+
     // 読み取りピンのアナログ値を取得
     pinMode(all_pin[i], INPUT);
     read_org[i] = analogRead(all_pin[i]);
     // 読み取りピンをLOWにして残った電気を吸い取る
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 0);
-    delayMicroseconds(10);
+    // delayMicroseconds(10);
+    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
+    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
   }
   interrupts(); // 割り込み禁止 解除
 }
@@ -401,6 +416,12 @@ void receiveEvent(int data_len) {
     } else if (t == 0x40) {
       // スリープ実行フラグON
       sleep_flag = 1;
+    } else if (t == 0x50) {
+      _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB,0x00);
+    } else if (t == 0x51) {
+      _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB,CLKCTRL_PDIV_10X_gc|CLKCTRL_PEN_bm);
+    } else if (t == 0x52) {
+      _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB,CLKCTRL_PDIV_16X_gc|CLKCTRL_PEN_bm);
     }
   }
 }
@@ -408,25 +429,26 @@ void receiveEvent(int data_len) {
 
 // I2C データ要求を受け取った時の処理
 void requestEvent() {
-  check_time = millis() - touch_now_time;
-  if (check_time < 100) {
+  // check_time = millis() - touch_now_time;
+  // while (send_status == 0) {}
+  // if (check_time < 100) {
     // タッチ読み込みしてから100ミリ秒以内であれば測定した内容を返す
     Wire.write(send_buf, res_length);
-  } else {
+  // } else {
     // タッチ読み込みから時間が経っていれば現在タッチしているかどうかだけ返す
-    read_analog_data(5); // 横軸だけ読み込む事で消費電力削減
-    if (read_total > 30) {
+    // read_analog_data(5); // 横軸だけ読み込む事で消費電力削減
+    // if (read_total > 30) {
       // タッチされていればタッチを読み込んで返す
-      read_touch();
-      Wire.write(send_buf, res_length);
-    } else {
+      // read_touch();
+      // Wire.write(send_buf, res_length);
+    // } else {
       // タッチされていなければ0詰めのデータを返す
-      memset(send_buf, 0x00, res_length);
-      Wire.write(send_buf, res_length);
-      old_point[0] = 0;
-      old_point[1] = 0;
-    }
-  }
+      // memset(send_buf, 0x00, res_length);
+      // Wire.write(send_buf, res_length);
+      // old_point[0] = 0;
+      // old_point[1] = 0;
+    // }
+  // }
   send_status = 0;
 }
 
