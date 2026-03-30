@@ -19,8 +19,11 @@
 
 // EEPROM のアドレス
 #define EEPADD_STATUS    0x00
-#define EEPADD_SEND_TYPE    0x01
-#define EEPADD_SPEED    0x02
+#define EEPADD_SPEED    0x01
+#define EEPADD_DRAG_TOUCH_TIME  0x02
+#define EEPADD_DRAG_INTERVAL_TIME  0x03
+#define EEPADD_TAP_TOUCH_TIME  0x04
+#define EEPADD_MOVE_START_TIME  0x05
 
 // I2Cイベント
 void receiveEvent(int data_len); // データを受け取った
@@ -37,7 +40,6 @@ short pin_def[11];
 // タッチした時の最大値(デフォルト値)
 const short pin_max_def[11] = {106, 112, 110, 116, 103,  109, 97, 109, 108, 104, 104};
 
-
 // 送信するデータのタイプ
 short send_type;
 
@@ -52,6 +54,16 @@ unsigned long touch_start_time; // タッチ開始した時間
 unsigned long touch_now_time; // 今の時間
 unsigned long touch_last_time; // 最後にタッチした時間
 unsigned long touch_time; // タッチし続けている時間
+
+//ドラッグ判定時間の設定
+unsigned short drag_touch_time_max; // ダブルタップの1回目のタッチの時間の最大
+unsigned short drag_interval_time_max; // ダブルタップの間の離している時間の最大
+
+// タップ判定時間
+unsigned short tap_touch_time_max;
+
+// 移動開始までの時間
+unsigned short move_touch_time_start; // 移動開始までの時間
 
 // 読み込みしてからどれくらい時間が経ったか
 unsigned long check_time;
@@ -72,13 +84,13 @@ short all_pin[11] = {
 };
 
 // 送信バッファ
-uint8_t send_buf[24];
+uint8_t send_buf[5];
 
 // バッファを送ったフラグ
 short send_status;
 
 // スピード設定
-short speed_index;
+unsigned short speed_index;
 
 // 速度設定用の構造体
 struct speed_setting {
@@ -124,10 +136,6 @@ speed_setting speed_buf = {
 // スリープフラグ
 short sleep_flag;
 
-// レスポンスタイプ別のレスポンスサイズ
-short res_length_list[] = {5, 2, 6, 22};
-short res_length = 0;
-
 // タッチのアナログ値取得
 void read_analog_raw(short check_max) {
   short i, t;
@@ -136,7 +144,6 @@ void read_analog_raw(short check_max) {
     // 読み取りピンをHIGHにして電気を流す
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 1);
-    // delayMicroseconds(10);
     for (t=0; t<40; t++) _NOP();
 
     // 読み取りピンのアナログ値を取得
@@ -145,7 +152,6 @@ void read_analog_raw(short check_max) {
     // 読み取りピンをLOWにして残った電気を吸い取る
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 0);
-    // delayMicroseconds(10);
     for (t=0; t<40; t++) _NOP();
   }
   interrupts(); // 割り込み禁止 解除
@@ -172,19 +178,6 @@ void read_analog_data(short check_max) {
 void read_touch() {
   short c[11], i, r[2], e, tx, ty, tf, x, y;
   unsigned long t;
-
-  if (send_type == 3) { // type 2. row,colピンのアナログ値をそのまま返す
-    // ピン情報を取得
-    read_analog_data(11);
-    // ピンのアナログ値をそのまま返す
-    for (i=0; i<11; i++) {
-      send_buf[(i*2)] = (read_org[i] >> 8) & 0xFF;
-      send_buf[(i*2) + 1] = read_org[i] & 0xFF;
-    }
-    // Wire.write(send_buf, 22);
-    send_status = 1;
-    return;
-  }
 
   // ピン情報を取得
   read_analog_data(11);
@@ -276,7 +269,7 @@ void read_touch() {
     if (old_point[0] == 0 && old_point[1] == 0) {
       touch_start_time = touch_now_time; // タッチ開始時間を設定
       t = touch_now_time - touch_last_time; // 前のタッチからどれくらい時間が経ったか
-      if (t > 40 && t < 160 && touch_time < 500) drag_flag = 0x08; // 前のタッチからすぐタッチされた & 前のタッチ時間が短い ならドラッグ
+      if (t > 40 && t < drag_interval_time_max && touch_time < drag_touch_time_max) drag_flag = 0x08; // 前のタッチからすぐタッチされた & 前のタッチ時間が短い ならドラッグ
     }
     touch_time = touch_now_time - touch_start_time; // タッチされ続けている時間 ミリ秒
     touch_last_time = touch_now_time; // 最後にタッチした時間
@@ -284,7 +277,7 @@ void read_touch() {
 
   } else {
     // 離された && タッチ時間が短ければタップと判定
-    if (old_point[0] > 0 && old_point[1] > 0 && touch_time > 30 && touch_time < 100) { // タップ判定(前測定時タッチされていた＋タッチ時間が短い)
+    if (old_point[0] > 0 && old_point[1] > 0 && touch_time > 30 && touch_time < tap_touch_time_max) { // タップ判定(前測定時タッチされていた＋タッチ時間が短い)
       if (double_touch_flag > 2) {
         // 2点でタップ
         tf |= 0x40;
@@ -299,81 +292,46 @@ void read_touch() {
     drag_flag = 0; // ドラッグ中
   }
 
-  if (send_type == 2) {
-    // タッチのX,Y座標を返す
-    send_buf[0] = (r[1] >> 8) & 0xFF; // x
-    send_buf[1] = r[1] & 0xFF; // x
-    send_buf[2] = (r[0] >> 8) & 0xFF; // y
-    send_buf[3] = r[0] & 0xFF; // y
-    send_buf[4] = (read_total >> 2) & 0xFF; // タッチ量
-    send_buf[5] = tf; // タッチ操作フラグ
-    // Wire.write(send_buf, 6);
-    send_status = 1;
-
-  } else if (send_type == 1) {
-    // 1 = 2バイトレスポンス
-    send_buf[0] = 0; // y 4bit | x 4bit
-    send_buf[1] = tf; // タッチ操作フラグ
-    if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
-      x = (r[1] / 32);
-      y = (r[0] / 32);
-      if (!(tf & 0x02)) {
-        // 横移動
-        send_buf[0] |= speed_buf.speed_x[x] & 0x0F;
-      }
-      if (!(tf & 0x01)) {
-        // 縦移動
-        send_buf[0] |= (speed_buf.speed_y[y] << 4) & 0xF0;
-      }
-      if (x < 10) send_buf[1] |= 0x10; // X移動マイナスフラグ
-      if (y < 8) send_buf[1] |= 0x20; // Y移動マイナスフラグ
-    }
-    // Wire.write(send_buf, 2);
-    send_status = 1;
-
-  } else {
-    // 0 = デフォルト az1uballと同じフォーマットを返す
-    if (read_total > 60 && touch_time > 100 && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
-      x = (r[1] / 32);
-      y = (r[0] / 32);
-      if (tf & 0x02) {
-        // 横に2点タッチされていた場合は縦移動しない
-        send_buf[0] = 0;
-        send_buf[1] = 0;
-      } else {
-        // 横移動
-        if (x > 10) {
-          send_buf[0] = 0;
-          send_buf[1] = speed_buf.speed_x[x];
-        } else {
-          send_buf[0] = speed_buf.speed_x[x];
-          send_buf[1] = 0;
-        }
-      }
-      if (tf & 0x01) {
-        // 縦に2点タッチされていた場合は縦移動しない
-        send_buf[2] = 0;
-        send_buf[3] = 0;
-      } else {
-        // 縦移動
-        if (y > 8) {
-          send_buf[2] = 0;
-          send_buf[3] = speed_buf.speed_y[y];
-        } else {
-          send_buf[2] = speed_buf.speed_y[y];
-          send_buf[3] = 0;
-        }
-      }
-    } else {
+  // 0 = デフォルト az1uballと同じフォーマットを返す
+  if (read_total > 60 && touch_time > move_touch_time_start && old_point[0] > 0 && old_point[1] > 0) { // タッチされている & タッチしてから0.1秒以上 & 前回のタッチ座標がある
+    x = (r[1] / 32);
+    y = (r[0] / 32);
+    if (tf & 0x02) {
+      // 横に2点タッチされていた場合は縦移動しない
       send_buf[0] = 0;
       send_buf[1] = 0;
+    } else {
+      // 横移動
+      if (x > 10) {
+        send_buf[0] = 0;
+        send_buf[1] = speed_buf.speed_x[x];
+      } else {
+        send_buf[0] = speed_buf.speed_x[x];
+        send_buf[1] = 0;
+      }
+    }
+    if (tf & 0x01) {
+      // 縦に2点タッチされていた場合は縦移動しない
       send_buf[2] = 0;
       send_buf[3] = 0;
+    } else {
+      // 縦移動
+      if (y > 8) {
+        send_buf[2] = 0;
+        send_buf[3] = speed_buf.speed_y[y];
+      } else {
+        send_buf[2] = speed_buf.speed_y[y];
+        send_buf[3] = 0;
+      }
     }
-    send_buf[4] = tf; // タッチ操作フラグ
-    // Wire.write(send_buf, 5);
-    send_status = 1;
+  } else {
+    send_buf[0] = 0;
+    send_buf[1] = 0;
+    send_buf[2] = 0;
+    send_buf[3] = 0;
   }
+  send_buf[4] = tf; // タッチ操作フラグ
+  send_status = 1;
 
   if (read_total > 60) {
     // 前回の位置を保持
@@ -388,28 +346,52 @@ void read_touch() {
 
 // I2C コマンドを受け取った
 void receiveEvent(int data_len) {
-  short t;
+  unsigned short t, c;
   // コマンド受け取り
   if (Wire.available()) {
     t = Wire.read();
-    if (t >= 0x20 && t <= 0x23) {
-      // 0x20 : AZ1UBALL と同じレスポンス
-      // 0x21 : AZTOUCH 2バイトレスポンス
-      // 0x22 : タッチのX,Y座標を返す
-      // 0x23 : row,colピンのアナログ値をそのまま返す
-      if ((t & 0x0F) != send_type) {
-        send_type = (t & 0x0F);
-        EEPROM.write(EEPADD_SEND_TYPE, (t & 0x0F));
-        res_length = res_length_list[send_type];
-      }
-    } else if (t >= 0x30 && t <= 0x34) {
+    if (t == 0x30) {
+      if (!Wire.available()) return;
+      c = Wire.read();
       // 0x30 ～ 0x34 速度設定
-      if ((t & 0x0F) != speed_index) {
-        speed_index = (t & 0x0F);
+      if (c != speed_index) {
+        speed_index = c;
         EEPROM.write(EEPADD_SPEED, (speed_index & 0x0F));
         memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
       }
     } else if (t == 0x40) {
+      // ドラッグ1回目のタッチ最大時間(n / 5ms)
+      if (!Wire.available()) return;
+      c = Wire.read();
+      if (drag_touch_time_max != (c * 5)) {
+        drag_touch_time_max = c * 5;
+        EEPROM.write(EEPADD_DRAG_TOUCH_TIME, c);
+      }
+    } else if (t == 0x41) {
+      // ドラッグ2回目のタッチまでの最大時間(n / 5ms)
+      if (!Wire.available()) return;
+      c = Wire.read();
+      if (drag_interval_time_max != (c * 5)) {
+        drag_interval_time_max = c * 5;
+        EEPROM.write(EEPADD_DRAG_INTERVAL_TIME, c);
+      }
+    } else if (t == 0x42) {
+      // タップのタッチの最大時間(n / 5ms)
+      if (!Wire.available()) return;
+      c = Wire.read();
+      if (tap_touch_time_max != (c * 5)) {
+        tap_touch_time_max = c * 5;
+        EEPROM.write(EEPADD_TAP_TOUCH_TIME, c);
+      }
+    } else if (t == 0x43) {
+      // 移動開始するまでの時間(n / 5ms)
+      if (!Wire.available()) return;
+      c = Wire.read();
+      if (move_touch_time_start != (c * 5)) {
+        move_touch_time_start = c * 5;
+        EEPROM.write(EEPADD_MOVE_START_TIME, c);
+      }
+    } else if (t == 0x50) {
       // スリープ実行フラグON
       sleep_flag = 1;
     }
@@ -419,37 +401,13 @@ void receiveEvent(int data_len) {
 
 // I2C データ要求を受け取った時の処理
 void requestEvent() {
-  // check_time = millis() - touch_now_time;
-  // while (send_status == 0) {}
-  // if (check_time < 100) {
-    // タッチ読み込みしてから100ミリ秒以内であれば測定した内容を返す
-    Wire.write(send_buf, res_length);
-  // } else {
-    // タッチ読み込みから時間が経っていれば現在タッチしているかどうかだけ返す
-    // read_analog_data(5); // 横軸だけ読み込む事で消費電力削減
-    // if (read_total > 30) {
-      // タッチされていればタッチを読み込んで返す
-      // read_touch();
-      // Wire.write(send_buf, res_length);
-    // } else {
-      // タッチされていなければ0詰めのデータを返す
-      // memset(send_buf, 0x00, res_length);
-      // Wire.write(send_buf, res_length);
-      // old_point[0] = 0;
-      // old_point[1] = 0;
-    // }
-  // }
+  Wire.write(send_buf, 5);
   send_status = 0;
 }
 
 void setup() {
   uint8_t c;
   short i;
-
-  // VCCチェックピン HIGHT
-  pinMode(PIN_PA5, OUTPUT);
-  digitalWrite(PIN_PA5, 1);
-  delay(10);
 
   // I2C ピンプルアップ
   pinMode(PIN_PB2, OUTPUT);
@@ -458,19 +416,28 @@ void setup() {
 
   // 初めての起動の場合EPPROMにタッチ最大値設定を書き込む
   c = EEPROM.read(EEPADD_STATUS); // 最初の0バイト目を読み込む
-  if (c != 0x21) {
-    EEPROM.write(EEPADD_STATUS, 0x21); // 初期化したよを書き込む
-    EEPROM.write(EEPADD_SEND_TYPE, 0x00); // レスポンスタイプAZ1UBALLフォーマットを指定
+  if (c != 0x29) {
+    EEPROM.write(EEPADD_STATUS, 0x29); // 初期化したよを書き込む
     EEPROM.write(EEPADD_SPEED, 0x03); // カーソル移動速度を指定
+    EEPROM.write(EEPADD_DRAG_TOUCH_TIME, 0x64); // ドラッグ1回目のタッチの最大時間(n / 5ms)
+    EEPROM.write(EEPADD_DRAG_INTERVAL_TIME, 0x28); // ドラッグ2回目のタッチまでの最大時間(n / 5ms)
+    EEPROM.write(EEPADD_TAP_TOUCH_TIME, 0x14); // タップのタッチの最大時間(n / 5ms)
+    EEPROM.write(EEPADD_MOVE_START_TIME, 0x14); // 移動開始するまでの時間(n / 5ms)
   }
-
-  // レスポンスタイプをEPPROMから読み込む
-  send_type = EEPROM.read(EEPADD_SEND_TYPE);
-  res_length = res_length_list[send_type];
 
   // カーソルの移動速度をEPPROMから読み込む
   speed_index = EEPROM.read(EEPADD_SPEED);
   memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
+
+  // ドラッグ時間の設定
+  drag_touch_time_max = EEPROM.read(EEPADD_DRAG_TOUCH_TIME) * 5;
+  drag_interval_time_max = EEPROM.read(EEPADD_DRAG_INTERVAL_TIME) * 5;
+
+  // タップ判定時間
+  tap_touch_time_max = EEPROM.read(EEPADD_TAP_TOUCH_TIME) * 5;
+
+  // 移動開始時間
+  move_touch_time_start = EEPROM.read(EEPADD_MOVE_START_TIME) * 5;
 
   // センサーピン初期化
   // col : A4, A5, A6, A7, B5 
@@ -523,6 +490,7 @@ void loop() {
     sleep_cpu();
   }
 
+  // 前回の読み込みデータを送信していたら次の読み込みを送信
   if (send_status == 0) {
     read_touch();
   }
