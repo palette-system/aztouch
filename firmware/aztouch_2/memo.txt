@@ -1,0 +1,17 @@
+
+
+// クロック数を変更するコード
+_PROTECTED_WRITE(CLKCTRL.MCLKCTRLB,CLKCTRL_PDIV_16X_gc|CLKCTRL_PEN_bm);
+
+
+
+
+
+
+
+
+
+
+
+
+

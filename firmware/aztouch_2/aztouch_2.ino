@@ -130,17 +130,14 @@ short res_length = 0;
 
 // タッチのアナログ値取得
 void read_analog_raw(short check_max) {
-  short i;
+  short i, t;
   noInterrupts(); // 割り込み禁止 開始
   for (i=0; i<check_max; i++) {
     // 読み取りピンをHIGHにして電気を流す
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 1);
     // delayMicroseconds(10);
-    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
-    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
-    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
-    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
+    for (t=0; t<40; t++) _NOP();
 
     // 読み取りピンのアナログ値を取得
     pinMode(all_pin[i], INPUT);
@@ -149,8 +146,7 @@ void read_analog_raw(short check_max) {
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 0);
     // delayMicroseconds(10);
-    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
-    _NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();_NOP();
+    for (t=0; t<40; t++) _NOP();
   }
   interrupts(); // 割り込み禁止 解除
 }
@@ -416,12 +412,6 @@ void receiveEvent(int data_len) {
     } else if (t == 0x40) {
       // スリープ実行フラグON
       sleep_flag = 1;
-    } else if (t == 0x50) {
-      _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB,0x00);
-    } else if (t == 0x51) {
-      _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB,CLKCTRL_PDIV_10X_gc|CLKCTRL_PEN_bm);
-    } else if (t == 0x52) {
-      _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB,CLKCTRL_PDIV_16X_gc|CLKCTRL_PEN_bm);
     }
   }
 }
