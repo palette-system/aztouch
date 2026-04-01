@@ -18,12 +18,13 @@
 #define I2C_CLOCK  100000
 
 // EEPROM のアドレス
-#define EEPADD_STATUS    0x00
-#define EEPADD_SPEED    0x01
-#define EEPADD_DRAG_TOUCH_TIME  0x02
+#define EEPADD_STATUS              0x00
+#define EEPADD_SPEED               0x01
+#define EEPADD_DRAG_TOUCH_TIME     0x02
 #define EEPADD_DRAG_INTERVAL_TIME  0x03
-#define EEPADD_TAP_TOUCH_TIME  0x04
-#define EEPADD_MOVE_START_TIME  0x05
+#define EEPADD_TAP_TOUCH_TIME      0x04
+#define EEPADD_MOVE_START_TIME     0x05
+#define EEPADD_READ_WAIT_TIME      0x06
 
 // I2Cイベント
 void receiveEvent(int data_len); // データを受け取った
@@ -39,9 +40,6 @@ short pin_def[11];
 
 // タッチした時の最大値(デフォルト値)
 const short pin_max_def[11] = {106, 112, 110, 116, 103,  109, 97, 109, 108, 104, 104};
-
-// 送信するデータのタイプ
-short send_type;
 
 // 読み込んだアナログ値の合計値
 short read_total;
@@ -64,6 +62,9 @@ unsigned short tap_touch_time_max;
 
 // 移動開始までの時間
 unsigned short move_touch_time_start; // 移動開始までの時間
+
+// アナログ値取得時のウェイトタイム(clock)
+unsigned short read_wait_time;
 
 // 読み込みしてからどれくらい時間が経ったか
 unsigned long check_time;
@@ -138,13 +139,13 @@ short sleep_flag;
 
 // タッチのアナログ値取得
 void read_analog_raw(short check_max) {
-  short i, t;
+  unsigned short i, t;
   noInterrupts(); // 割り込み禁止 開始
   for (i=0; i<check_max; i++) {
     // 読み取りピンをHIGHにして電気を流す
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 1);
-    for (t=0; t<40; t++) _NOP();
+    for (t=0; t<read_wait_time; t++) _NOP();
 
     // 読み取りピンのアナログ値を取得
     pinMode(all_pin[i], INPUT);
@@ -152,7 +153,7 @@ void read_analog_raw(short check_max) {
     // 読み取りピンをLOWにして残った電気を吸い取る
     pinMode(all_pin[i], OUTPUT);
     digitalWrite(all_pin[i], 0);
-    for (t=0; t<40; t++) _NOP();
+    for (t=0; t<read_wait_time; t++) _NOP();
   }
   interrupts(); // 割り込み禁止 解除
 }
@@ -391,6 +392,14 @@ void receiveEvent(int data_len) {
         move_touch_time_start = c * 5;
         EEPROM.write(EEPADD_MOVE_START_TIME, c);
       }
+    } else if (t == 0x44) {
+      // アナログ値取得待ち時間
+      if (!Wire.available()) return;
+      c = Wire.read();
+      if (read_wait_time != c) {
+        read_wait_time = c;
+        EEPROM.write(EEPADD_READ_WAIT_TIME, c);
+      }
     } else if (t == 0x50) {
       // スリープ実行フラグON
       sleep_flag = 1;
@@ -416,13 +425,14 @@ void setup() {
 
   // 初めての起動の場合EPPROMにタッチ最大値設定を書き込む
   c = EEPROM.read(EEPADD_STATUS); // 最初の0バイト目を読み込む
-  if (c != 0x29) {
-    EEPROM.write(EEPADD_STATUS, 0x29); // 初期化したよを書き込む
+  if (c != 0x23) {
+    EEPROM.write(EEPADD_STATUS, 0x23); // 初期化したよを書き込む
     EEPROM.write(EEPADD_SPEED, 0x03); // カーソル移動速度を指定
     EEPROM.write(EEPADD_DRAG_TOUCH_TIME, 0x64); // ドラッグ1回目のタッチの最大時間(n / 5ms)
     EEPROM.write(EEPADD_DRAG_INTERVAL_TIME, 0x28); // ドラッグ2回目のタッチまでの最大時間(n / 5ms)
     EEPROM.write(EEPADD_TAP_TOUCH_TIME, 0x14); // タップのタッチの最大時間(n / 5ms)
     EEPROM.write(EEPADD_MOVE_START_TIME, 0x14); // 移動開始するまでの時間(n / 5ms)
+    EEPROM.write(EEPADD_READ_WAIT_TIME, 0x28); // アナログ値取得待ち時間
   }
 
   // カーソルの移動速度をEPPROMから読み込む
@@ -438,6 +448,9 @@ void setup() {
 
   // 移動開始時間
   move_touch_time_start = EEPROM.read(EEPADD_MOVE_START_TIME) * 5;
+
+  // アナログ値取得待ち時間
+  read_wait_time = EEPROM.read(EEPADD_READ_WAIT_TIME);
 
   // センサーピン初期化
   // col : A4, A5, A6, A7, B5 

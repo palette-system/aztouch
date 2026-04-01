@@ -397,6 +397,7 @@ void requestEvent() {
     old_point[0] = 0;
     old_point[1] = 0;
   }
+  sleep_flag = 1;
 }
 
 void setup() {
