@@ -351,16 +351,16 @@ void receiveEvent(int data_len) {
   // コマンド受け取り
   if (Wire.available()) {
     t = Wire.read();
-    if (t == 0x30) {
+    if (t == 0x40) {
       if (!Wire.available()) return;
       c = Wire.read();
-      // 0x30 ～ 0x34 速度設定
-      if (c != speed_index) {
+      // 0x00 ～ 0x04 速度設定
+      if (c <= 0x04 && c != speed_index) {
         speed_index = c;
         EEPROM.write(EEPADD_SPEED, (speed_index & 0x0F));
         memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
       }
-    } else if (t == 0x40) {
+    } else if (t == 0x41) {
       // ドラッグ1回目のタッチ最大時間(n / 5ms)
       if (!Wire.available()) return;
       c = Wire.read();
@@ -368,7 +368,7 @@ void receiveEvent(int data_len) {
         drag_touch_time_max = c * 5;
         EEPROM.write(EEPADD_DRAG_TOUCH_TIME, c);
       }
-    } else if (t == 0x41) {
+    } else if (t == 0x42) {
       // ドラッグ2回目のタッチまでの最大時間(n / 5ms)
       if (!Wire.available()) return;
       c = Wire.read();
@@ -376,7 +376,7 @@ void receiveEvent(int data_len) {
         drag_interval_time_max = c * 5;
         EEPROM.write(EEPADD_DRAG_INTERVAL_TIME, c);
       }
-    } else if (t == 0x42) {
+    } else if (t == 0x43) {
       // タップのタッチの最大時間(n / 5ms)
       if (!Wire.available()) return;
       c = Wire.read();
@@ -384,7 +384,7 @@ void receiveEvent(int data_len) {
         tap_touch_time_max = c * 5;
         EEPROM.write(EEPADD_TAP_TOUCH_TIME, c);
       }
-    } else if (t == 0x43) {
+    } else if (t == 0x44) {
       // 移動開始するまでの時間(n / 5ms)
       if (!Wire.available()) return;
       c = Wire.read();
@@ -392,7 +392,7 @@ void receiveEvent(int data_len) {
         move_touch_time_start = c * 5;
         EEPROM.write(EEPADD_MOVE_START_TIME, c);
       }
-    } else if (t == 0x44) {
+    } else if (t == 0x45) {
       // アナログ値取得待ち時間
       if (!Wire.available()) return;
       c = Wire.read();
@@ -400,7 +400,7 @@ void receiveEvent(int data_len) {
         read_wait_time = c;
         EEPROM.write(EEPADD_READ_WAIT_TIME, c);
       }
-    } else if (t == 0x50) {
+    } else if (t == 0x4C) {
       // スリープ実行フラグON
       sleep_flag = 1;
     }
