@@ -30,15 +30,21 @@ I2Cアドレス：0x0A
 
 ## アクション設定
 <br>
-ドラッグ判定<br>
-<br>
+<b>ドラッグ判定</b><br>
 <img src="/images/drag_flow.jpg" width="700"><br>
 
-<br><br>
-
-タップ判定<br>
 <br>
+
+<b>タップ判定</b><br>
 <img src="/images/tap_flow.jpg" width="700"><br>
 
+<br>
 
-<br><br>
+<b>マウス移動判定</b><br>
+タップの時にマウスが移動してしまわないように、タッチしてから少しの間マウス移動はしないようになっています。<br>
+<img src="/images/move_flow.jpg" width="700"><br>
+
+<br>
+
+
+
