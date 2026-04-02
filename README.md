@@ -26,7 +26,8 @@ I2Cアドレス：0x0A(固定)
     <td>0x30</td>
     <td>
     <b>マウスのスピード設定</b><br>
-    次に送られてきたバイトで移動速度を設定。0x00 ～ 0x04 の間で設定可能<br>
+    次に送られてきたバイトで移動速度を設定。<br>
+    0x00 ～ 0x04 の間で設定可能<br>
     <br>
     コマンド例：[0x30, 0x01]
     </td>
@@ -35,12 +36,8 @@ I2Cアドレス：0x0A(固定)
     <td>0x40</td>
     <td>
     <b>ドラッグ1回目のタッチの最大時間(n / 5ms)</b><br>
-    次に送られてきたバイトでdrag_touch_time_maxの値を設定。<br>
-    <font style="font-size: 0.7em; font-color: #444;">
+    次に送られてきたバイトで<b>drag_touch_time_max</b>の値を設定。<br>
     ※ 1=5ミリ秒、デフォルト値：0x64(500ミリ秒)<br>
-    ※ EEPROM に保存されるため電源を落としても保持されます。
-    </font>
-    <br>
     <br>
     コマンド例：[0x40, 0x64]
     </td>
@@ -49,11 +46,8 @@ I2Cアドレス：0x0A(固定)
     <td>0x41</td>
     <td>
     <b>ドラッグ2回目のタッチまでの最大時間(n / 5ms)</b><br>
-    次に送られてきたバイトでdrag_interval_time_maxの値を設定。<br>
-    <font style="font-size: 0.7em; font-color: #444;">
+    次に送られてきたバイトで<b>drag_interval_time_max</b>の値を設定。<br>
     ※ 1=5ミリ秒、デフォルト値：0x28(200ミリ秒)<br>
-    ※ EEPROM に保存されるため電源を落としても保持されます。
-    </font><br>
     <br>
     コマンド例：[0x41, 0x28]
     </td>
@@ -62,11 +56,8 @@ I2Cアドレス：0x0A(固定)
     <td>0x42</td>
     <td>
     <b>タップのタッチの最大時間(n / 5ms)</b><br>
-    次に送られてきたバイトでtap_touch_time_maxの値を設定。<br>
-    <font style="font-size: 0.7em; font-color: #444;">
+    次に送られてきたバイトで<b>tap_touch_time_max</b>の値を設定。<br>
     ※ 1=5ミリ秒、デフォルト値：0x14(100ミリ秒)<br>
-    ※ EEPROM に保存されるため電源を落としても保持されます。
-    </font><br>
     <br>
     コマンド例：[0x42, 0x14]
     </td>
@@ -75,11 +66,8 @@ I2Cアドレス：0x0A(固定)
     <td>0x43</td>
     <td>
     <b>移動開始するまでの時間(n / 5ms)</b><br>
-    次に送られてきたバイトでmove_touch_time_startの値を設定。<br>
-    <font style="font-size: 0.7em; font-color: #444;">
+    次に送られてきたバイトで<b>move_touch_time_start</b>の値を設定。<br>
     ※ 1=5ミリ秒、デフォルト値：0x14(100ミリ秒)<br>
-    ※ EEPROM に保存されるため電源を落としても保持されます。
-    </font><br>
     <br>
     コマンド例：[0x43, 0x14]
     </td>
@@ -88,16 +76,14 @@ I2Cアドレス：0x0A(固定)
     <td>0x44</td>
     <td>
     <b>アナログ値取得待ち時間</b><br>
-    次に送られてきたバイトでread_wait_timeの値を設定。<br>
-    <font style="font-size: 0.7em; font-color: #444;">
+    次に送られてきたバイトで<b>read_wait_time</b>の値を設定。<br>
     ※ デフォルト値：0x28(40 NOP)<br>
-    ※ EEPROM に保存されるため電源を落としても保持されます。
-    </font><br>
     <br>
     コマンド例：[0x44, 0x28]
     </td>
   </tr>
 </table>
+※ EEPROM に保存されるため電源を落としても保持されます。<br>
 
 <br><br>
 
