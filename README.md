@@ -153,6 +153,101 @@ AZ1UBALLやPIM447と同じフォーマットで操作情報を取得できます
 
 <br><br>
 
+<b>サイクル間隔と各イベントの感度</b><br>
+<table>
+  <tr>
+    <th>間隔(ミリ秒)</th>
+    <th>消費電力(mA)</th>
+    <th>移動</th>
+    <th>2点タッチ</th>
+    <th>タップ</th>
+    <th>ダブルタップ</th>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td>2.0</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>〇</td>
+  </tr>
+  <tr>
+    <td>20</td>
+    <td>1.9</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>△</td>
+  </tr>
+  <tr>
+    <td>30</td>
+    <td>1.8</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>△</td>
+  </tr>
+  <tr>
+    <td>40</td>
+    <td>1.8</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>△</td>
+    <td>△</td>
+  </tr>
+  <tr>
+    <td>50</td>
+    <td>1.8</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>△</td>
+    <td>△</td>
+  </tr>
+  <tr>
+    <td>60</td>
+    <td>1.8</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>△</td>
+    <td>△</td>
+  </tr>
+  <tr>
+    <td>70</td>
+    <td>1.7</td>
+    <td>〇</td>
+    <td>〇</td>
+    <td>×</td>
+    <td>×</td>
+  </tr>
+  <tr>
+    <td>80</td>
+    <td>1.7</td>
+    <td>△</td>
+    <td>△</td>
+    <td>×</td>
+    <td>×</td>
+  </tr>
+  <tr>
+    <td>90</td>
+    <td>1.7</td>
+    <td>△</td>
+    <td>△</td>
+    <td>×</td>
+    <td>×</td>
+  </tr>
+  <tr>
+    <td>100</td>
+    <td>1.7</td>
+    <td>△</td>
+    <td>△</td>
+    <td>×</td>
+    <td>×</td>
+  </tr>
+</table>
+
+
+<br><br>
+
 
 ## ピン情報取得フロー
 <br>
