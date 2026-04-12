@@ -84,6 +84,12 @@ short all_pin[11] = {
   PIN_PB5, PIN_PA7, PIN_PA6, PIN_PA1, PIN_PC1, PIN_PA2 // col 6ピン
 };
 
+// レスポンスタイプ
+short send_type;
+
+// EEPROMバッファ
+uint8_t send_eeprom_buf[7];
+
 // 送信バッファ
 uint8_t send_buf[5];
 
@@ -138,7 +144,7 @@ speed_setting speed_buf = {
 short sleep_flag;
 
 // タッチのアナログ値取得
-void read_analog_raw(short check_max) {
+void read_analog_raw(unsigned short check_max) {
   unsigned short i, t;
   noInterrupts(); // 割り込み禁止 開始
   for (i=0; i<check_max; i++) {
@@ -351,12 +357,16 @@ void receiveEvent(int data_len) {
   // コマンド受け取り
   if (Wire.available()) {
     t = Wire.read();
-    if (t == 0x40) {
+    if (t == 0x30) {
+      send_type = 1;
+
+    } else if (t == 0x40) {
       if (!Wire.available()) return;
       c = Wire.read();
       // 0x00 ～ 0x04 速度設定
       if (c <= 0x04 && c != speed_index) {
-        speed_index = c;
+        send_eeprom_buf[EEPADD_SPEED] = c;
+        speed_index = send_eeprom_buf[EEPADD_SPEED];
         EEPROM.write(EEPADD_SPEED, (speed_index & 0x0F));
         memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
       }
@@ -365,7 +375,8 @@ void receiveEvent(int data_len) {
       if (!Wire.available()) return;
       c = Wire.read();
       if (drag_touch_time_max != (c * 5)) {
-        drag_touch_time_max = c * 5;
+        send_eeprom_buf[EEPADD_DRAG_TOUCH_TIME] = c;
+        drag_touch_time_max = send_eeprom_buf[EEPADD_DRAG_TOUCH_TIME] * 5;
         EEPROM.write(EEPADD_DRAG_TOUCH_TIME, c);
       }
     } else if (t == 0x42) {
@@ -373,7 +384,8 @@ void receiveEvent(int data_len) {
       if (!Wire.available()) return;
       c = Wire.read();
       if (drag_interval_time_max != (c * 5)) {
-        drag_interval_time_max = c * 5;
+        send_eeprom_buf[EEPADD_DRAG_INTERVAL_TIME] = c;
+        drag_interval_time_max = send_eeprom_buf[EEPADD_DRAG_INTERVAL_TIME] * 5;
         EEPROM.write(EEPADD_DRAG_INTERVAL_TIME, c);
       }
     } else if (t == 0x43) {
@@ -381,7 +393,8 @@ void receiveEvent(int data_len) {
       if (!Wire.available()) return;
       c = Wire.read();
       if (tap_touch_time_max != (c * 5)) {
-        tap_touch_time_max = c * 5;
+        send_eeprom_buf[EEPADD_TAP_TOUCH_TIME] = c;
+        tap_touch_time_max = send_eeprom_buf[EEPADD_TAP_TOUCH_TIME] * 5;
         EEPROM.write(EEPADD_TAP_TOUCH_TIME, c);
       }
     } else if (t == 0x44) {
@@ -389,7 +402,8 @@ void receiveEvent(int data_len) {
       if (!Wire.available()) return;
       c = Wire.read();
       if (move_touch_time_start != (c * 5)) {
-        move_touch_time_start = c * 5;
+        send_eeprom_buf[EEPADD_MOVE_START_TIME] = c;
+        move_touch_time_start = send_eeprom_buf[EEPADD_MOVE_START_TIME] * 5;
         EEPROM.write(EEPADD_MOVE_START_TIME, c);
       }
     } else if (t == 0x45) {
@@ -397,9 +411,50 @@ void receiveEvent(int data_len) {
       if (!Wire.available()) return;
       c = Wire.read();
       if (read_wait_time != c) {
-        read_wait_time = c;
+        send_eeprom_buf[EEPADD_READ_WAIT_TIME] = c;
+        read_wait_time = send_eeprom_buf[EEPADD_READ_WAIT_TIME];
         EEPROM.write(EEPADD_READ_WAIT_TIME, c);
       }
+    } else if (t == 0x46) {
+      // 設定リセット
+      // カーソル移動速度を指定
+      if (send_eeprom_buf[EEPADD_STATUS] != 0x03) {
+        send_eeprom_buf[EEPADD_STATUS] = 0x03;
+        EEPROM.write(EEPADD_SPEED, send_eeprom_buf[EEPADD_STATUS]);
+        speed_index = send_eeprom_buf[EEPADD_STATUS];
+        memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
+      }
+      // ドラッグ1回目のタッチの最大時間(n / 5ms)
+      if (send_eeprom_buf[EEPADD_DRAG_TOUCH_TIME] != 0x64) {
+        send_eeprom_buf[EEPADD_DRAG_TOUCH_TIME] = 0x64;
+        EEPROM.write(EEPADD_DRAG_TOUCH_TIME, send_eeprom_buf[EEPADD_DRAG_TOUCH_TIME]);
+        drag_touch_time_max = send_eeprom_buf[EEPADD_DRAG_TOUCH_TIME] * 5;
+      }
+      // ドラッグ2回目のタッチまでの最大時間(n / 5ms)
+      if (send_eeprom_buf[EEPADD_DRAG_INTERVAL_TIME] != 0x28) {
+        send_eeprom_buf[EEPADD_DRAG_INTERVAL_TIME] = 0x28;
+        drag_interval_time_max = send_eeprom_buf[EEPADD_DRAG_INTERVAL_TIME] * 5;
+        EEPROM.write(EEPADD_DRAG_INTERVAL_TIME, send_eeprom_buf[EEPADD_DRAG_INTERVAL_TIME]);
+      }
+      // タップのタッチの最大時間(n / 5ms)
+      if (send_eeprom_buf[EEPADD_TAP_TOUCH_TIME] != 0x14) {
+        send_eeprom_buf[EEPADD_TAP_TOUCH_TIME] = 0x14;
+        tap_touch_time_max = send_eeprom_buf[EEPADD_TAP_TOUCH_TIME] * 5;
+        EEPROM.write(EEPADD_TAP_TOUCH_TIME, send_eeprom_buf[EEPADD_TAP_TOUCH_TIME]);
+      }
+      // 移動開始するまでの時間(n / 5ms)
+      if (send_eeprom_buf[EEPADD_MOVE_START_TIME] != 0x14) {
+        send_eeprom_buf[EEPADD_MOVE_START_TIME] = 0x14;
+        move_touch_time_start = send_eeprom_buf[EEPADD_MOVE_START_TIME] * 5;
+        EEPROM.write(EEPADD_MOVE_START_TIME, send_eeprom_buf[EEPADD_MOVE_START_TIME]);
+      }
+      // アナログ値取得待ち時間
+      if (send_eeprom_buf[EEPADD_READ_WAIT_TIME] != 0x28) {
+        send_eeprom_buf[EEPADD_READ_WAIT_TIME] = 0x28;
+        read_wait_time = send_eeprom_buf[EEPADD_READ_WAIT_TIME];
+        EEPROM.write(EEPADD_READ_WAIT_TIME, send_eeprom_buf[EEPADD_READ_WAIT_TIME]);
+      }
+
     } else if (t == 0x4C) {
       // スリープ実行フラグON
       sleep_flag = 1;
@@ -410,8 +465,13 @@ void receiveEvent(int data_len) {
 
 // I2C データ要求を受け取った時の処理
 void requestEvent() {
-  Wire.write(send_buf, 5);
-  send_status = 0;
+  if (send_type == 1) {
+    Wire.write(send_eeprom_buf, 7);
+    send_type = 0;
+  } else {
+    Wire.write(send_buf, 5);
+    send_status = 0;
+  }
 }
 
 void setup() {
@@ -435,22 +495,30 @@ void setup() {
     EEPROM.write(EEPADD_READ_WAIT_TIME, 0x28); // アナログ値取得待ち時間
   }
 
+  send_eeprom_buf[EEPADD_STATUS] = EEPROM.read(EEPADD_STATUS);
+  send_eeprom_buf[EEPADD_SPEED] = EEPROM.read(EEPADD_SPEED);
+  send_eeprom_buf[EEPADD_DRAG_TOUCH_TIME] = EEPROM.read(EEPADD_DRAG_TOUCH_TIME);
+  send_eeprom_buf[EEPADD_DRAG_INTERVAL_TIME] = EEPROM.read(EEPADD_DRAG_INTERVAL_TIME);
+  send_eeprom_buf[EEPADD_TAP_TOUCH_TIME] = EEPROM.read(EEPADD_TAP_TOUCH_TIME);
+  send_eeprom_buf[EEPADD_MOVE_START_TIME] = EEPROM.read(EEPADD_MOVE_START_TIME);
+  send_eeprom_buf[EEPADD_READ_WAIT_TIME] = EEPROM.read(EEPADD_READ_WAIT_TIME);
+
   // カーソルの移動速度をEPPROMから読み込む
-  speed_index = EEPROM.read(EEPADD_SPEED);
+  speed_index = send_eeprom_buf[EEPADD_SPEED];
   memcpy(&speed_buf, &speed_type[speed_index], sizeof(speed_setting));
 
   // ドラッグ時間の設定
-  drag_touch_time_max = EEPROM.read(EEPADD_DRAG_TOUCH_TIME) * 5;
-  drag_interval_time_max = EEPROM.read(EEPADD_DRAG_INTERVAL_TIME) * 5;
+  drag_touch_time_max = send_eeprom_buf[EEPADD_DRAG_TOUCH_TIME] * 5;
+  drag_interval_time_max = send_eeprom_buf[EEPADD_DRAG_INTERVAL_TIME] * 5;
 
   // タップ判定時間
-  tap_touch_time_max = EEPROM.read(EEPADD_TAP_TOUCH_TIME) * 5;
+  tap_touch_time_max = send_eeprom_buf[EEPADD_TAP_TOUCH_TIME] * 5;
 
   // 移動開始時間
-  move_touch_time_start = EEPROM.read(EEPADD_MOVE_START_TIME) * 5;
+  move_touch_time_start = send_eeprom_buf[EEPADD_MOVE_START_TIME] * 5;
 
   // アナログ値取得待ち時間
-  read_wait_time = EEPROM.read(EEPADD_READ_WAIT_TIME);
+  read_wait_time = send_eeprom_buf[EEPADD_READ_WAIT_TIME];
 
   // センサーピン初期化
   // col : A4, A5, A6, A7, B5 
@@ -478,6 +546,7 @@ void setup() {
   drag_flag = 0;
   sleep_flag = 0;
   send_status = 0;
+  send_type = 0;
 
 }
 
