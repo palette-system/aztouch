@@ -1,6 +1,11 @@
 # AZTOUCH (ミニトラックパッド)
 
+<table><tr><td>
+<img src="/images/aztouch_front.png" width="350"><br>
+<img src="/images/aztouch_back.png" width="350"><br>
+</td><td>
 <img src="/images/info_mini.jpg" width="350">
+</td></tr></table>
 
 <br><br>
 
@@ -26,10 +31,10 @@ I2Cアドレス：0x0A(固定)
     <td>0x30</td>
     <td>
     <b>設定値要求</b><br>
-    次にデータリクエストが来た時のレスポンスが、下記の7バイトのレスポンスになる。<br>
+    このコマンドを送った次にデータリクエストが来た時に、1度だけ下記の7バイトのレスポンスになる。<br>
     [<br>
     　0x23(固定),<br>
-    　マウススピード設定,<br>
+    　マウススピード設定(0x00 ～ 0x04),<br>
     　drag_touch_time_max,<br>
     　drag_interval_time_max,<br>
     　tap_touch_time_max,<br>
