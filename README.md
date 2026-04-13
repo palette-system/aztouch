@@ -23,11 +23,30 @@ I2Cアドレス：0x0A(固定)
     <th>内容</th>
   </tr>
   <tr>
+    <td>0x30</td>
+    <td>
+    <b>設定値要求</b><br>
+    次にデータリクエストが来た時のレスポンスが、下記の7バイトのレスポンスになる。<br>
+    [<br>
+    　0x23(固定),<br>
+    　マウススピード設定,<br>
+    　drag_touch_time_max,<br>
+    　drag_interval_time_max,<br>
+    　tap_touch_time_max,<br>
+    　move_touch_time_start,<br>
+    　read_wait_time<br>
+    ]<br>
+    <br>
+    コマンド例：[0x30]
+    </td>
+  </tr>
+  <tr>
     <td>0x40</td>
     <td>
     <b>マウスのスピード設定</b><br>
     次に送られてきたバイトで移動速度を設定。<br>
     0x00 ～ 0x04 の間で設定可能<br>
+    デフォルト値：0x02<br>
     <br>
     コマンド例：[0x40, 0x01]
     </td>

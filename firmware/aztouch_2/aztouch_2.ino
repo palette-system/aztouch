@@ -487,7 +487,7 @@ void setup() {
   c = EEPROM.read(EEPADD_STATUS); // 最初の0バイト目を読み込む
   if (c != 0x23) {
     EEPROM.write(EEPADD_STATUS, 0x23); // 初期化したよを書き込む
-    EEPROM.write(EEPADD_SPEED, 0x03); // カーソル移動速度を指定
+    EEPROM.write(EEPADD_SPEED, 0x02); // カーソル移動速度を指定
     EEPROM.write(EEPADD_DRAG_TOUCH_TIME, 0x64); // ドラッグ1回目のタッチの最大時間(n / 5ms)
     EEPROM.write(EEPADD_DRAG_INTERVAL_TIME, 0x28); // ドラッグ2回目のタッチまでの最大時間(n / 5ms)
     EEPROM.write(EEPADD_TAP_TOUCH_TIME, 0x14); // タップのタッチの最大時間(n / 5ms)
